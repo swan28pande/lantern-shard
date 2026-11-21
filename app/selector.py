@@ -158,6 +158,12 @@ def main() -> None:
             if (all_unrun - base) / 1000 < run_cost:
                 unrun |= cheap
                 cheap = set()
+        # a big test that reaches the changed lines with (almost) no cheap test beside it has no
+        # witness to wait for: hand it over regardless
+        forced = {b for b in big if b in an.direct and len(an.direct & cheap) < 3}
+        if forced:
+            unrun |= forced
+            big -= forced
         if big and cheap and not big_always:
             # running cheap tests only to decide about big ones: worth it unless handing over
             # everything (big included) is cheaper than the run itself

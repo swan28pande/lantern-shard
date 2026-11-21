@@ -26,6 +26,7 @@ class Maps:
         self.refs = data["refs"]  # name -> list[(file, line)]
         self.file_tests = data["file_tests"]  # file -> set idx (any runtime line)
         self.class_lines = data.get("class_tests", {})  # "file:qualname" -> set idx
+        self.import_time = data.get("import_time", {})  # file -> {func qualname: [caller scopes]}
 
     def tests(self, idx) -> frozenset:
         if idx is None:
@@ -95,6 +96,7 @@ class Analysis:
         self.broad: set[int] = set()  # tests executing a changed function anywhere
         self.narrow: set[int] = set()  # tests reaching the changed statements (expression-level edits)
         self.class_or_module = False
+        self.import_time = False
 
 
 def analyze(fps: list[FilePatch], changes: dict, maps: Maps, all_tests: set[int], test_file_of: dict[int, str]) -> Analysis:
@@ -159,6 +161,14 @@ def _analyze_py(fp, changes, maps: Maps, an: Analysis, all_tests, test_file_of):
         an.direct |= direct
         an.candidates |= direct
         if s.kind == "func":
+            callers = maps.import_time.get(rel, {}).get(s.name)
+            if callers:
+                # runs while modules/classes are being created: its effect lands in whatever
+                # those class/module bodies build, so their users are at risk
+                users = _scope_users(callers, maps)
+                an.candidates |= users
+                an.import_time = True
+                an.notes.append(f"{rel}: import-time {s.name} -> {len(users)} users")
             # whole function: anything executing it may see the change
             func_tests = maps.range_tests(rel, s.body_start, s.end)
             an.broad |= func_tests
@@ -366,3 +376,24 @@ def _statement_range(old_src, new_src, qualname, line, trees):
         return None
     # if/elif chain: an elif header is an If nested in orelse; its range is its own header.
     return best
+
+
+def _scope_users(scopes, maps: Maps) -> set:
+    out: set = set()
+    for sc in scopes:
+        mod, _, q = sc.partition(":")
+        if q == "*" or q == "":
+            idx = maps.opens.get("__importers__:" + mod)
+            if idx is not None:
+                out |= maps.tests(idx)
+            rel = mod.replace(".", "/") + ".py"
+            out |= maps.tests(maps.file_tests.get(rel))
+        else:
+            idx = maps.classes.get(f"{mod}:{q}")
+            if idx is not None:
+                out |= maps.tests(idx)
+            else:
+                idx = maps.opens.get("__importers__:" + mod)
+                if idx is not None:
+                    out |= maps.tests(idx)
+    return out
