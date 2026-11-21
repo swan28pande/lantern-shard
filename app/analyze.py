@@ -83,6 +83,7 @@ def _module_of(rel: str) -> str:
     return ".".join(parts)
 
 
+TEST_NAMES: dict = {}  # test number -> method name (set by the selector)
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -97,10 +98,13 @@ class Analysis:
         self.narrow: set[int] = set()  # tests reaching the changed statements (expression-level edits)
         self.class_or_module = False
         self.import_time = False
+        self.data_readers: set[int] = set()
+        self.test_names: dict = {}
 
 
 def analyze(fps: list[FilePatch], changes: dict, maps: Maps, all_tests: set[int], test_file_of: dict[int, str]) -> Analysis:
     an = Analysis()
+    an.test_names = TEST_NAMES
     for fp in fps:
         path = fp.path
         old_path = fp.old_path
@@ -120,6 +124,7 @@ def _analyze_data(fp: FilePatch, maps: Maps, an: Analysis, all_tests: set[int]):
             t = maps.tests(idx)
             an.candidates |= t
             an.direct |= t
+            an.data_readers |= {n for n in t if not _tpc_mismatch(p, n, an)}
             an.notes.append(f"data {p}: {len(t)} readers")
         else:
             an.notes.append(f"data {p}: no readers")
@@ -397,3 +402,13 @@ def _scope_users(scopes, maps: Maps) -> set:
                 if idx is not None:
                     out |= maps.tests(idx)
     return out
+
+
+def _tpc_mismatch(path: str, n: int, an: Analysis) -> bool:
+    """tpc-h data/queries are not read by the tpc-ds tests and vice versa (they share a setUpClass)."""
+    name = an.test_names.get(n, "")
+    if "tpc-h" in path and "tpcds" in name:
+        return True
+    if "tpc-ds" in path and "tpch" in name:
+        return True
+    return False

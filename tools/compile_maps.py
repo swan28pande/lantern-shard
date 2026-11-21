@@ -71,6 +71,28 @@ for f in sorted(glob.glob(os.path.join(raw, "opens*.json"))):
             opens.setdefault(p, set()).add(tix(t))
     times.update(d["times"])
 
+# files opened during setUpClass are attributed (by pytest) to the class's first test: they are
+# really read for every test of that class
+by_class: dict[str, list] = {}
+for t in test_ids:
+    parts = t.split("::")
+    if len(parts) == 3:
+        by_class.setdefault(parts[0] + "::" + parts[1], []).append(t)
+for ck, members in by_class.items():
+    fpath = os.path.join(repo, ck.split("::")[0])
+    try:
+        src = open(fpath, encoding="utf-8").read()
+    except OSError:
+        continue
+    if "def setUpClass" not in src and "def setUpModule" not in src:
+        continue
+    first = sorted(members, key=lambda t: t.split("::")[-1])[0]
+    fi = tix(first)
+    allm = {tix(m) for m in members}
+    for p_, ts in opens.items():
+        if fi in ts and not p_.endswith(".py"):
+            ts.update(allm)
+
 classes: dict[str, set] = {}
 for f in sorted(glob.glob(os.path.join(cls_dir, "classes*.json"))):
     d = json.load(open(f))

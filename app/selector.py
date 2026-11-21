@@ -69,6 +69,9 @@ def main() -> None:
     from analyze import Maps, analyze
 
     maps = Maps(raw, num_of_id)
+    import analyze as _an
+
+    _an.TEST_NAMES.update({n: id_of[n].split("::")[-1] for n in ms})
 
     commits = sorted(
         p[:-6] for p in os.listdir(os.path.join(DATA, "commits")) if p.endswith(".patch")
@@ -161,6 +164,8 @@ def main() -> None:
         # a big test that reaches the changed lines with (almost) no cheap test beside it has no
         # witness to wait for: hand it over regardless
         forced = {b for b in big if b in an.direct and len(an.direct & cheap) < 3}
+        # data files: a big test reading the changed file can fail on its own
+        forced |= big & an.data_readers
         if forced:
             unrun |= forced
             big -= forced
@@ -208,6 +213,11 @@ def main() -> None:
         runner.preload(full=True, test_modules=mods)
         runner.run_jobs([j for _, j, _ in jobs], parallel=2, deadline=T0 + DEADLINE)
     for cid, job, unrun in jobs:
+        # a test that passed but took far longer than usual may hit the labelers' timeout
+        slow = {n for n, used in job.cpu.items() if used > 5 * cpu[n] + 1.0 and n not in job.failed}
+        if slow:
+            log(f"[{cid}] unusually slow (treated as failing): {sorted(slow)}")
+            job.failed |= slow
         sel = set(job.failed) | unrun
         if job.aborted:
             # not verified in time: hand over everything that was going to be checked
