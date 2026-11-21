@@ -231,6 +231,7 @@ class Job:
         self.abort_on_fail: frozenset = frozenset()
         self.probe_only: frozenset = frozenset()
         self.child_cpu = 0.0
+        self.aborted = False
 
     def done(self):
         return not self.pending and self.pid is None
@@ -278,10 +279,17 @@ def _reap(job: Job, kill=False):
     job.pid = job.fd = None
 
 
-def run_jobs(jobs: list[Job], parallel: int = 2, setup_grace: float = 40.0) -> None:
+def run_jobs(jobs: list[Job], parallel: int = 2, setup_grace: float = 40.0, deadline: float | None = None) -> None:
     queue = list(jobs)
     active: list[Job] = []
     while queue or active:
+        if deadline is not None and time.monotonic() > deadline:
+            for j in active:
+                _reap(j, kill=True)
+            for j in active + queue:
+                j.aborted = True
+            log(f"deadline hit: {len(active) + len(queue)} commits handed over unverified")
+            return
         while queue and len(active) < parallel:
             j = queue.pop(0)
             if not j.pending:

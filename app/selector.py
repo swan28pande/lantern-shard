@@ -31,9 +31,11 @@ RUN_MAX = float(os.environ.get("BR_RUN_MAX", "5.0"))
 # Cheap-run CPU budget per commit (recorded seconds); above it we hand tests to CI unrun.
 CPU_FACTOR = float(os.environ.get("BR_CPU_FACTOR", "1.0"))
 OVERHEAD = float(os.environ.get("BR_OVERHEAD", "0.8"))
-HAND_RATIO = float(os.environ.get("BR_HAND_RATIO", "1.2"))
+HAND_RATIO = float(os.environ.get("BR_HAND_RATIO", "1.5"))
 BIG_MIN = float(os.environ.get("BR_BIG_MIN", "2.0"))
 LABEL = os.environ.get("BR_MODE") == "label"
+DEADLINE = float(os.environ.get("BR_DEADLINE", "140"))
+T0 = time.monotonic()
 PLAN = {} if os.environ.get("BR_MODE") == "plan" else None
 ABORT_MIN = float(os.environ.get("BR_ABORT_MIN", "0.4"))
 
@@ -124,6 +126,12 @@ def main() -> None:
         #      failed alone in calibration), or when nothing could be run to tell.
         # pooled: cost far more CPU here than their recorded seconds -> hand over directly.
         # cheap: run here; only real failures are printed.
+        if an.syntax_error:
+            # a module that no longer compiles breaks (nearly) every test file through the
+            # dialect test helpers: hand everything over, nothing to verify
+            log(f"[{cid}] syntax error: handing over all tests")
+            results[cid] = pack(sorted(all_tests), ms)[1]
+            continue
         big = {n for n in cands if sec[n] >= BIG_MIN}
         pooled = {n for n in cands - big if cpu[n] > sec[n] * HAND_RATIO}
         cheap = cands - big - pooled
@@ -149,6 +157,14 @@ def main() -> None:
             all_unrun = pack(sorted(unrun | cheap), ms)[0]
             if (all_unrun - base) / 1000 < run_cost:
                 unrun |= cheap
+                cheap = set()
+        if big and cheap and not big_always:
+            # running cheap tests only to decide about big ones: worth it unless handing over
+            # everything (big included) is cheaper than the run itself
+            run_then = run_cost + pack(sorted(unrun), ms)[0] / 1000
+            hand_all = pack(sorted(unrun | cheap | big), ms)[0] / 1000
+            if hand_all < run_then:
+                unrun |= cheap | big
                 cheap = set()
         if big and (not cheap or big_always):
             unrun |= big
@@ -184,9 +200,12 @@ def main() -> None:
     if jobs:
         mods = {file_of[n][:-3].replace("/", ".") for _, j, _ in jobs for n, _ in j.pending}
         runner.preload(full=True, test_modules=mods)
-        runner.run_jobs([j for _, j, _ in jobs], parallel=2)
+        runner.run_jobs([j for _, j, _ in jobs], parallel=2, deadline=T0 + DEADLINE)
     for cid, job, unrun in jobs:
         sel = set(job.failed) | unrun
+        if job.aborted:
+            # not verified in time: hand over everything that was going to be checked
+            sel |= {n for n, _ in job.pending} | conditional.get(cid, set())
         if job.failed and conditional.get(cid):
             sel |= conditional[cid]
         log(f"[{cid}] failed: {sorted(job.failed)} child_cpu={job.child_cpu:.2f} tests_cpu={sum(job.cpu.values()):.2f} spawns={job.spawn_count}")

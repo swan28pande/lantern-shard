@@ -21,7 +21,7 @@ sec = {n: t["seconds"] for n, t in tests.items()}
 ms = {n: round(s * 1000) for n, s in sec.items()}
 
 
-def simulate(R=1.5, BIG=2.0, OV=0.6, CF=1.0, lump=True, verbose=False):
+def simulate(R=1.5, BIG=2.0, OV=0.6, CF=1.0, lump=True, verbose=False, run_pooled_if_big=False, pooled_direct=False):
     total = cpu_tot = 0.0
     misses = []
     for cid, p in plan.items():
@@ -31,6 +31,16 @@ def simulate(R=1.5, BIG=2.0, OV=0.6, CF=1.0, lump=True, verbose=False):
         big = {n for n in cand if sec[n] >= BIG}
         pooled = {n for n in cand - big if c[n] > sec[n] * R}
         cheap = cand - big - pooled
+        if p.get("syntax"):
+            sel = set(tests)
+            cost = pack(sorted(sel), ms)[0] / 1000
+            total += cost
+            if verbose:
+                print(f"  {cid} SYNTAX cost={cost:.1f}")
+            continue
+        if run_pooled_if_big and big:
+            cheap |= pooled
+            pooled = set()
         run_cost = sum(c[n] for n in cheap) + (OV if cheap else 0)
         if lump and cheap and not big:
             delta = (pack(sorted(pooled | cheap), ms)[0] - pack(sorted(pooled), ms)[0]) / 1000
@@ -41,7 +51,7 @@ def simulate(R=1.5, BIG=2.0, OV=0.6, CF=1.0, lump=True, verbose=False):
         sel = set(pooled)
         ran_fail = cheap & fail
         sel |= ran_fail
-        if big and (ran_fail or not cheap):
+        if big and (ran_fail or not cheap or (pooled_direct and (pooled & set(p["direct"])))):
             sel |= big
         cost = pack(sorted(sel), ms)[0] / 1000
         total += cost
@@ -54,9 +64,7 @@ def simulate(R=1.5, BIG=2.0, OV=0.6, CF=1.0, lump=True, verbose=False):
 
 
 if __name__ == "__main__":
-    for R, BIG, lump in itertools.product((1.2, 1.5, 2.5), (1.0, 2.0, 5.0), (True, False)):
-        tot, c, m = simulate(R, BIG, lump=lump)
-        print(f"R={R} BIG={BIG} lump={lump}: sim={tot:.1f} cpu={c:.1f} misses={len(m)} total={tot + c + 300 * len(m):.1f}")
-    tot, c, m = simulate(verbose="-v" in sys.argv)
-    for x in m:
-        print("MISS", x)
+    for pdx in (False, True):
+        for R in (1.2, 1.5):
+            tot, c, m = simulate(R, 2.0, pooled_direct=pdx)
+            print(f"pooled_direct={pdx} R={R}: sim={tot:.1f} cpu={c:.1f} misses={len(m)} total={tot + c + 300 * len(m):.1f} {[x[0] for x in m]}")
