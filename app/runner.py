@@ -86,11 +86,13 @@ def _sync_executor_class():
     return SyncExecutor
 
 
-def child_run(cid: str, changes: dict, test_ids: list[tuple[int, str]], wfd: int, abort_on_fail=frozenset()) -> None:
+def child_run(cid: str, changes: dict, test_ids: list[tuple[int, str]], wfd: int, abort_on_fail=frozenset(), probe_only=frozenset()) -> None:
     """Runs in the forked child. Writes 'S n', 'P n', 'F n' lines to wfd."""
     import unittest
 
     out = os.fdopen(wfd, "w", buffering=1)
+    prof = os.environ.get("BR_PROFILE")
+    t0 = time.process_time()
     os.chdir(REPO)
     try:
         setup_overlay(cid, changes)
@@ -159,14 +161,22 @@ def child_run(cid: str, changes: dict, test_ids: list[tuple[int, str]], wfd: int
             if "ProcessPoolExecutor" in vars(mod):
                 mod.ProcessPoolExecutor = sync_exec
             klass = getattr(mod, cls) if cls else None
+            if prof:
+                log(f"[{cid}] t={time.process_time() - t0:.3f} imported {modname}")
             if klass is not None:
                 klass.setUpClass()
+            if prof:
+                log(f"[{cid}] t={time.process_time() - t0:.3f} setUpClass {cls}")
         except BaseException as e:  # import / class setup failure: all of these fail
             log(f"[{cid}] setup {modname}.{cls} failed: {type(e).__name__}: {e}")
             for n, _ in items:
                 out.write(f"F {n}\n")
             continue
         for n, meth in items:
+            if n in probe_only:
+                # setup succeeded and this test is not otherwise at risk
+                out.write(f"P {n}\n")
+                continue
             out.write(f"S {n}\n")
             current["n"] = n
             ru0 = resource.getrusage(resource.RUSAGE_SELF)
@@ -193,6 +203,8 @@ def child_run(cid: str, changes: dict, test_ids: list[tuple[int, str]], wfd: int
                 klass.doClassCleanups()
             except BaseException as e:
                 log(f"[{cid}] teardown {modname}.{cls}: {type(e).__name__}: {e}")
+    if prof:
+        log(f"[{cid}] t={time.process_time() - t0:.3f} done")
     out.flush()
     out.close()
     os._exit(0)
@@ -217,6 +229,8 @@ class Job:
         self.spawn_count = 0
         self.cpu: dict[int, float] = {}
         self.abort_on_fail: frozenset = frozenset()
+        self.probe_only: frozenset = frozenset()
+        self.child_cpu = 0.0
 
     def done(self):
         return not self.pending and self.pid is None
@@ -230,7 +244,7 @@ def _spawn(job: Job):
         try:
             # keep stdout clean: the child must never print to the real stdout
             os.dup2(2, 1)
-            child_run(job.cid, job.changes, job.pending, w, job.abort_on_fail)
+            child_run(job.cid, job.changes, job.pending, w, job.abort_on_fail, job.probe_only)
         except BaseException as e:
             try:
                 log("child crash", repr(e))
@@ -253,7 +267,8 @@ def _reap(job: Job, kill=False):
         except ProcessLookupError:
             pass
     try:
-        os.waitpid(job.pid, 0)
+        _, _, ru = os.wait4(job.pid, 0)
+        job.child_cpu += ru.ru_utime + ru.ru_stime
     except ChildProcessError:
         pass
     try:
@@ -342,7 +357,7 @@ def run_jobs(jobs: list[Job], parallel: int = 2, setup_grace: float = 40.0) -> N
                         active.remove(j)
 
 
-def preload(full: bool = True) -> None:
+def preload(full: bool = True, test_modules=()) -> None:
     """Import heavy third-party modules (and the pristine sqlglot + tests) once."""
     t0 = time.process_time()
     import unittest  # noqa: F401
@@ -366,4 +381,10 @@ def preload(full: bool = True) -> None:
             sys.path.insert(0, REPO)
         os.chdir(REPO)
         import sqlglot  # noqa: F401
+
+        for m in sorted(test_modules):
+            try:
+                importlib.import_module(m)
+            except BaseException as e:
+                log("preload failed", m, repr(e))
     log(f"preload third-party {t1 - t0:.2f}s, sqlglot {time.process_time() - t1:.2f}s")

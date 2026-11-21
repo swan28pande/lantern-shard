@@ -1,0 +1,234 @@
+{
+ "tests.dialects.test_athena::TestAthena": [
+  0.10804499999999999,
+  4.300000000000137e-05
+ ],
+ "tests.dialects.test_bigquery::TestBigQuery": [
+  0.07549299999999999,
+  1.8999999999998185e-05
+ ],
+ "tests.dialects.test_clickhouse::TestClickhouse": [
+  0.067659,
+  1.6000000000005593e-05
+ ],
+ "tests.dialects.test_databricks::TestDatabricks": [
+  0.058598,
+  1.2999999999995654e-05
+ ],
+ "tests.dialects.test_dax::TestDAX": [
+  0.061541,
+  1.2000000000003327e-05
+ ],
+ "tests.dialects.test_dialect::TestDialect": [
+  0.05682899999999999,
+  1.1000000000000593e-05
+ ],
+ "tests.dialects.test_doris::TestDoris": [
+  0.068358,
+  2.300000000000392e-05
+ ],
+ "tests.dialects.test_dremio::TestDremio": [
+  0.0596,
+  9.999999999999593e-06
+ ],
+ "tests.dialects.test_drill::TestDrill": [
+  0.059552999999999995,
+  1.600000000000039e-05
+ ],
+ "tests.dialects.test_druid::TestDruid": [
+  0.09321199999999999,
+  1.3999999999996654e-05
+ ],
+ "tests.dialects.test_duckdb::TestDuckDB": [
+  0.08948999999999999,
+  1.6999999999996185e-05
+ ],
+ "tests.dialects.test_dune::TestDune": [
+  0.09719799999999999,
+  2.5999999999994777e-05
+ ],
+ "tests.dialects.test_exasol::TestExasol": [
+  0.11628799999999999,
+  4.000000000000531e-05
+ ],
+ "tests.dialects.test_fabric::TestFabric": [
+  0.07990599999999999,
+  1.8000000000000654e-05
+ ],
+ "tests.dialects.test_hive::TestHive": [
+  0.079433,
+  4.200000000000037e-05
+ ],
+ "tests.dialects.test_materialize::TestMaterialize": [
+  0.07906099999999999,
+  1.5999999999998654e-05
+ ],
+ "tests.dialects.test_mysql::TestMySQL": [
+  0.08229500000000001,
+  2.2999999999995246e-05
+ ],
+ "tests.dialects.test_oracle::TestOracle": [
+  0.076372,
+  1.8000000000000654e-05
+ ],
+ "tests.dialects.test_pipe_syntax::TestPipeSyntax": [
+  0.079528,
+  2.4999999999990308e-05
+ ],
+ "tests.dialects.test_postgres::TestPostgres": [
+  0.48022,
+  5.0999999999981616e-05
+ ],
+ "tests.dialects.test_presto::TestPresto": [
+  0.11237399999999999,
+  2.0000000000002655e-05
+ ],
+ "tests.dialects.test_prql::TestPRQL": [
+  0.064612,
+  4.0000000000000105e-05
+ ],
+ "tests.dialects.test_redshift::TestRedshift": [
+  0.06892,
+  1.8000000000000654e-05
+ ],
+ "tests.dialects.test_risingwave::TestRisingWave": [
+  0.058395,
+  1.2000000000001593e-05
+ ],
+ "tests.dialects.test_singlestore::TestSingleStore": [
+  0.069447,
+  4.49999999999999e-05
+ ],
+ "tests.dialects.test_snowflake::TestSnowflake": [
+  0.064884,
+  2.1000000000000185e-05
+ ],
+ "tests.dialects.test_solr::TestSolr": [
+  0.06261,
+  1.4000000000000123e-05
+ ],
+ "tests.dialects.test_spark::TestSpark": [
+  0.061466,
+  2.4999999999997247e-05
+ ],
+ "tests.dialects.test_sqlite::TestSQLite": [
+  0.061835,
+  1.2999999999999123e-05
+ ],
+ "tests.dialects.test_starrocks::TestStarrocks": [
+  0.079455,
+  5.10000000000059e-05
+ ],
+ "tests.dialects.test_tableau::TestTableau": [
+  0.070712,
+  1.4000000000003593e-05
+ ],
+ "tests.dialects.test_teradata::TestTeradata": [
+  0.06794299999999999,
+  1.8000000000000654e-05
+ ],
+ "tests.dialects.test_trino::TestTrino": [
+  0.06649999999999999,
+  1.700000000000139e-05
+ ],
+ "tests.dialects.test_tsql::TestTSQL": [
+  0.08591499999999999,
+  1.8000000000000654e-05
+ ],
+ "tests.test_anonymize::TestAnonymize": [
+  0.005096,
+  1.4000000000000123e-05
+ ],
+ "tests.test_build::TestBuild": [
+  0.004730999999999999,
+  1.4999999999999823e-05
+ ],
+ "tests.test_dialect_entry_points::TestDialectEntryPoints": [
+  0.004397,
+  1.600000000000039e-05
+ ],
+ "tests.test_dialect_imports::TestDialectImports": [
+  0.00181,
+  1.6999999999999654e-05
+ ],
+ "tests.test_diff::TestDiff": [
+  0.0037099999999999998,
+  1.4000000000000123e-05
+ ],
+ "tests.test_errors::TestErrors": [
+  0.002072,
+  2.1999999999999884e-05
+ ],
+ "tests.test_executor::TestExecutor": [
+  0.09689899999999999,
+  2.527832
+ ],
+ "tests.test_expressions::TestExprs": [
+  0.016316999999999998,
+  3.0000000000000512e-05
+ ],
+ "tests.test_generator::TestGenerator": [
+  0.064146,
+  1.8000000000004124e-05
+ ],
+ "tests.test_helper::TestHelper": [
+  0.0031509999999999997,
+  2.1999999999999884e-05
+ ],
+ "tests.test_jsonpath::TestJsonpath": [
+  0.008505,
+  2.4000000000000583e-05
+ ],
+ "tests.test_lineage::TestLineage": [
+  0.321152,
+  0.00045500000000001095
+ ],
+ "tests.test_optimize_cross_joins::TestOptimizeCrossJoins": [
+  0.164443,
+  4.900000000000737e-05
+ ],
+ "tests.test_optimizer::TestOptimizer": [
+  0.131234,
+  0.157404
+ ],
+ "tests.test_parser::TestParser": [
+  0.018172,
+  1.4999999999999389e-05
+ ],
+ "tests.test_schema::TestSchema": [
+  0.034339999999999996,
+  1.3999999999998389e-05
+ ],
+ "tests.test_serde::TestSerde": [
+  0.02631,
+  1.3999999999996654e-05
+ ],
+ "tests.test_simplify_between::TestSimplifyBetween": [
+  0.034582,
+  1.5999999999998654e-05
+ ],
+ "tests.test_sqlglotc::TestSQLGlotC": [
+  0.244257,
+  0.06449800000000001
+ ],
+ "tests.test_time::TestTime": [
+  0.015571,
+  1.1999999999998123e-05
+ ],
+ "tests.test_tokens::TestTokens": [
+  0.030015,
+  2.3999999999999716e-05
+ ],
+ "tests.test_transforms::TestTransforms": [
+  0.004123,
+  1.000000000000046e-05
+ ],
+ "tests.test_transpile::TestTranspile": [
+  0.0035250000000000004,
+  1.299999999999999e-05
+ ],
+ "tests.test_typing::TestTyping": [
+  0.001957,
+  1.0999999999999725e-05
+ ]
+}

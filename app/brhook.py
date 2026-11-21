@@ -5,11 +5,6 @@ unless BR_OVERLAY names a manifest, so spawned subprocesses of a test see the
 same patched files as the test itself.
 """
 
-import builtins
-import importlib.abc
-import importlib.util
-import io
-import json
 import os
 import sys
 
@@ -17,12 +12,14 @@ REPO = os.environ.get("SQLGLOT_DIR", "/opt/sqlglot")
 _installed = None
 
 
-class _Finder(importlib.abc.MetaPathFinder):
+class _Finder:
     def __init__(self, mods, deleted):
         self.mods = mods
         self.deleted = deleted
 
     def find_spec(self, fullname, path=None, target=None):
+        import importlib.util
+
         if fullname in self.deleted:
             raise ModuleNotFoundError("No module named %r" % fullname, name=fullname)
         hit = self.mods.get(fullname)
@@ -52,6 +49,9 @@ def install(manifest):
     global _installed
     if _installed is not None:
         return
+    import builtins
+    import importlib
+    import io
     _installed = manifest
     mods, deleted_mods, redirect, deleted_files = {}, set(), {}, set()
     for rel, dst in manifest.get("files", {}).items():
@@ -126,6 +126,9 @@ def install_from_env():
     if not path:
         return
     try:
+        import io
+        import json
+
         with io.open(path, encoding="utf-8") as f:
             install(json.load(f))
     except Exception as e:  # never break an interpreter over this

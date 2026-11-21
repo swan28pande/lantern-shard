@@ -31,9 +31,10 @@ RUN_MAX = float(os.environ.get("BR_RUN_MAX", "5.0"))
 # Cheap-run CPU budget per commit (recorded seconds); above it we hand tests to CI unrun.
 CPU_FACTOR = float(os.environ.get("BR_CPU_FACTOR", "1.0"))
 OVERHEAD = float(os.environ.get("BR_OVERHEAD", "0.8"))
-HAND_RATIO = float(os.environ.get("BR_HAND_RATIO", "1.5"))
-SKIP_MIN = float(os.environ.get("BR_SKIP_MIN", "2.0"))
+HAND_RATIO = float(os.environ.get("BR_HAND_RATIO", "1.2"))
+BIG_MIN = float(os.environ.get("BR_BIG_MIN", "2.0"))
 LABEL = os.environ.get("BR_MODE") == "label"
+PLAN = {} if os.environ.get("BR_MODE") == "plan" else None
 ABORT_MIN = float(os.environ.get("BR_ABORT_MIN", "0.4"))
 
 
@@ -55,6 +56,11 @@ def main() -> None:
     except Exception:
         cpu_by_id = {}
     cpu = {n: cpu_by_id.get(id_of[n], sec[n]) * CPU_FACTOR for n in ms}
+    try:
+        setup_cost = {k: tuple(v) for k, v in json.load(open(os.path.join(APP, "maps", "setup.json"))).items()}
+    except Exception:
+        setup_cost = {}
+    class_of = {n: file_of[n][:-3].replace("/", ".") + "::" + id_of[n].split("::")[1] for n in ms}
 
     with open(MAPS, "rb") as f:
         raw = pickle.load(f)
@@ -68,6 +74,7 @@ def main() -> None:
     results: dict[str, list[list[int]]] = {}
     jobs: list[tuple[str, Job, set[int]]] = []
     plans = {}
+    conditional: dict[str, set[int]] = {}
 
     for cid in commits:
         try:
@@ -92,6 +99,10 @@ def main() -> None:
             continue
 
         cands = set(all_tests) if an.everything else set(an.candidates)
+        if PLAN is not None:
+            PLAN[cid] = {"cand": sorted(cands), "direct": sorted(an.direct), "broad": sorted(an.broad),
+                         "syntax": an.syntax_error, "notes": an.notes}
+            continue
         if LABEL:
             # ground-truth mode (local only): run a broad superset, expensive tests included
             broad = set(cands) | set(an.broad)
@@ -109,41 +120,76 @@ def main() -> None:
             jobs.append((cid, job, set()))
             plans[cid] = (sorted(an.candidates), sorted(an.direct), sorted(an.broad))
             continue
-        # per test: running here costs its CPU; handing it to CI costs its recorded seconds
-        hand = {n for n in cands if cpu[n] > sec[n] * HAND_RATIO or sec[n] >= RUN_MAX}
-        if not (an.everything or an.syntax_error):
-            # long tests that only reach the changed code indirectly are rarely broken by it
-            hand = {n for n in hand if n in an.direct or sec[n] < SKIP_MIN}
-        cheap = cands - hand - {n for n in cands if cpu[n] > sec[n] * HAND_RATIO or sec[n] >= RUN_MAX}
-        unrun = set(hand)
+        # big: long tests, never run here; only handed over when a run test fails (they never
+        #      failed alone in calibration), or when nothing could be run to tell.
+        # pooled: cost far more CPU here than their recorded seconds -> hand over directly.
+        # cheap: run here; only real failures are printed.
+        big = {n for n in cands if sec[n] >= BIG_MIN}
+        pooled = {n for n in cands - big if cpu[n] > sec[n] * HAND_RATIO}
+        cheap = cands - big - pooled
+        if an.everything:
+            big_always = True
+        else:
+            big_always = False
+        unrun = set(pooled)
+        # per test class: running costs its setUpClass + the tests' CPU; handing costs their seconds
+        groups: dict[str, set[int]] = {}
+        for n in cheap:
+            groups.setdefault(class_of[n], set()).add(n)
+        for key, g in (groups.items() if not big else ()):
+            # (when big tests wait on this run's verdict, keep every cheap test as a signal)
+            imp, setup = setup_cost.get(key, (0.0, 0.0))
+            if setup + 0.3 * imp + sum(cpu[n] for n in g) > sum(sec[n] for n in g) + 0.3:
+                unrun |= g
+                cheap -= g
         run_cost = sum(cpu[n] for n in cheap) + (OVERHEAD if cheap else 0)
-        base = pack(sorted(unrun), ms)[0]
-        all_unrun = pack(sorted(unrun | cheap), ms)[0]
-        if cheap and (all_unrun - base) / 1000 < run_cost:
-            unrun |= cheap
-            cheap = set()
+        run_cost += sum(setup_cost.get(k, (0, 0))[1] for k in {class_of[n] for n in cheap})
+        if cheap and not big and not an.syntax_error:
+            base = pack(sorted(unrun), ms)[0]
+            all_unrun = pack(sorted(unrun | cheap), ms)[0]
+            if (all_unrun - base) / 1000 < run_cost:
+                unrun |= cheap
+                cheap = set()
+        if big and (not cheap or big_always):
+            unrun |= big
+            big = set()
         log(
             f"[{cid}] {'; '.join(an.notes)[:300]} | cand={len(cands)} run={len(cheap)}"
             f" ({sum(sec[n] for n in cheap):.2f}s) unrun={len(unrun)} ({sum(sec[n] for n in unrun):.2f}s)"
         )
         plans[cid] = unrun
-        if cheap:
+        if cheap or an.syntax_error:
             order = sorted(cheap, key=lambda n: (file_of[n], n))
             limits = {n: 6.0 + 4 * cpu[n] for n in order}
             job = Job(cid, changes, [(n, id_of[n]) for n in order], limits)
             job.abort_on_fail = frozenset(n for n in order if sec[n] >= ABORT_MIN)
+            if an.syntax_error:
+                # import-time breakage: probe every test class's import + setUpClass
+                probe = sorted(all_tests - cheap - unrun, key=lambda n: (file_of[n], n))
+                job.probe_only = frozenset(probe)
+                job.pending = sorted(job.pending + [(n, id_of[n]) for n in probe], key=lambda t: (file_of[t[0]], t[0]))
+                for n in probe:
+                    job.limits[n] = 30.0
             jobs.append((cid, job, unrun))
+            conditional[cid] = big
         else:
             results[cid] = pack(sorted(unrun), ms)[1]
 
+    if PLAN is not None:
+        with open(os.environ["BR_LABEL_OUT"], "w") as f:
+            json.dump(PLAN, f)
+        return
     t_an = time.process_time() - t_start
     log(f"analysis cpu {t_an:.2f}s; {len(jobs)} commits need runs")
     if jobs:
-        runner.preload(full=True)
+        mods = {file_of[n][:-3].replace("/", ".") for _, j, _ in jobs for n, _ in j.pending}
+        runner.preload(full=True, test_modules=mods)
         runner.run_jobs([j for _, j, _ in jobs], parallel=2)
     for cid, job, unrun in jobs:
         sel = set(job.failed) | unrun
-        log(f"[{cid}] failed: {sorted(job.failed)}")
+        if job.failed and conditional.get(cid):
+            sel |= conditional[cid]
+        log(f"[{cid}] failed: {sorted(job.failed)} child_cpu={job.child_cpu:.2f} tests_cpu={sum(job.cpu.values()):.2f} spawns={job.spawn_count}")
         results[cid] = pack(sorted(sel), ms)[1]
 
     if LABEL:

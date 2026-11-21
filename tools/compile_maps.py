@@ -166,6 +166,14 @@ for mod, rel in pyfiles.items():
     for d in deps | {mod}:
         opens.setdefault("__importers__:" + d, set()).update(ts)
 
+# lazy imports: a test that uses class C (dialect, parser, ...) imports C's module and its closure
+for cname, ts in classes.items():
+    mod = cname.split(":")[0]
+    if mod not in pyfiles:
+        continue
+    for d in close(mod) | {mod}:
+        opens.setdefault("__importers__:" + d, set()).update(ts)
+
 # scopes + identifier references in sqlglot sources
 scopes = {}
 refs: dict[str, list] = {}
