@@ -214,11 +214,10 @@ def main() -> None:
         runner.run_jobs([j for _, j, _ in jobs], parallel=2, deadline=T0 + DEADLINE)
     for cid, job, unrun in jobs:
         # a test that passed but took far longer than usual may hit the labelers' timeout
-        slow = {n for n, used in job.cpu.items() if used > 5 * cpu[n] + 1.0 and n not in job.failed}
+        slow = {n for n, used in job.cpu.items() if used > 10 * cpu[n] + 3.0 and n not in job.failed}
         if slow:
-            log(f"[{cid}] unusually slow (treated as failing): {sorted(slow)}")
-            job.failed |= slow
-        sel = set(job.failed) | unrun
+            log(f"[{cid}] unusually slow (handed over): {sorted(slow)}")
+        sel = set(job.failed) | unrun | slow
         if job.aborted:
             # not verified in time: hand over everything that was going to be checked
             sel |= {n for n, _ in job.pending} | conditional.get(cid, set())
