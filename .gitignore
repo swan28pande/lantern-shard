@@ -1,0 +1,4 @@
+out.jsonl
+err.log
+__pycache__/
+maps/maps_v0.json.gz
